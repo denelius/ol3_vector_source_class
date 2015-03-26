@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>OL3</title>
+    <link rel="stylesheet" href="http://code.jquery.com/ui/1.9.2/themes/base/jquery-ui.css" type="text/css">
+    <link rel="stylesheet" href="http://ol3js.org/en/master/css/ol.css" type="text/css">
+    <style>
+        body { margin:0; padding:0; }
+        #map { position:absolute; top:0; bottom:0; width:100%; }
+    </style>
+  </head>
+  <body>
+    <div id="map" class="map"></div>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.10.4/jquery-ui.min.js"></script>
+    <script src="http://ol3js.org/en/master/build/ol.js" type="text/javascript"></script>
+    <script type="text/javascript">
+
+    var istyles = {
+  	  'highlight_under': [new ol.style.Style({
+    	  image: new ol.style.Circle({
+            radius: 12,
+            fill: new ol.style.Fill({color: 'rgba(216,0,216,1)'})
+          })
+      })],
+      'highlight_over': [new ol.style.Style({
+      	image: new ol.style.Circle({
+              radius: 12,
+              fill: new ol.style.Fill({color: 'rgba(254,254,254,0.1)'}),
+              stroke: new ol.style.Stroke({color: 'rgba(216,0,216,1)', width: 3})
+          })
+      })],
+      'point_blue': [new ol.style.Style({
+        image: new ol.style.Circle({
+              radius: 6,
+              fill: new ol.style.Fill({color: 'rgba(57,155,221,1)'}),
+              stroke: new ol.style.Stroke({color: 'rgba(31,119,180,1)', width: 2})
+          })
+      })],
+      'point_orange': [new ol.style.Style({
+        image: new ol.style.Circle({
+              radius: 6,
+              fill: new ol.style.Fill({color: 'rgba(255,165,83,1)'}),
+              stroke: new ol.style.Stroke({color: 'rgba(255,127,14,1)', width: 2})
+          })
+      })],
+      'point_red': [new ol.style.Style({
+        image: new ol.style.Circle({
+              radius: 6,
+              fill: new ol.style.Fill({color: 'rgba(228,107,107,1)'}),
+              stroke: new ol.style.Stroke({color: 'rgba(214,39,40,1)', width: 2})
+          })
+      })]
+    };
+
+    var pointsFunction = function(feature, resolution) {
+      var val = parseInt(feature.getProperties().value);
+      if (val <= 500 ){
+        return istyles["point_blue"];
+      } else if ((val >  500) && (val <= 1100)){
+        return istyles["point_orange"];
+      } else {
+        return istyles["point_red"];
+      }
+    };
+
+    var highlight_icon = new ol.style.Style({
+      image: new ol.style.Icon(({
+        anchor: [-4, 36],
+        anchorXUnits: 'pixels',
+        anchorYUnits: 'pixels',
+        src: 'images/arrow.png'
+      }))
+    });
+
+    var vectorSource = new ol.source.Vector();
+    var geojsonFormat = new ol.format.GeoJSON();
+
+    var highlightLayer = new ol.layer.Vector({
+      source: vectorSource,
+      style: highlight_icon
+    });
+
+    var pointLayer = new ol.layer.Vector({
+  	  source: new ol.source.GeoJSON({
+  	    projection :'EPSG:3857',
+  	     url: "json/highlight.json"
+  	  }),
+      style: pointsFunction
+    });
+
+    var map = new ol.Map({
+      layers: [
+        new ol.layer.Tile({
+          source: new ol.source.OSM()
+        }),   pointLayer, highlightLayer
+      ],
+      target: 'map',
+      view: new ol.View({
+      	  	center: ol.proj.transform([-73.9663,40.7815], 'EPSG:4326', 'EPSG:3857'),
+        zoom: 14
+      })
+    });
+
+    map.on('click', function(evt) {
+  		var lonlat = ol.proj.transform(evt.coordinate, 'EPSG:4326', 'EPSG:3857');
+  		var point = new ol.geom.Point([evt.coordinate[0], evt.coordinate[1]]);
+  		point.transform('EPSG:3857', 'EPSG:4326');
+  		highlightFeature(point.getCoordinates())
+	  });
+
+    function highlightFeature(coords){
+      var url ="json/highlight.json";
+      var keepval = 99999999;
+      var nearest;
+      var promise = $.getJSON(url);
+      promise.done(function(data) { 
+        $.each(data.features, function (key, val) {
+          var tcoords = val.geometry.coordinates + "," + coords;
+          var csplit = tcoords.split(",");
+          var dist = calcDist(csplit[1],csplit[0],csplit[3],csplit[2]);
+          if (dist < keepval){
+            keepval = dist;
+            nearest = val.geometry.coordinates;
+          }
+        });
+
+        var point = new ol.geom.Point(nearest);
+        point.transform('EPSG:4326', 'EPSG:3857');
+        var pointFeature = new ol.Feature({
+          geometry: point
+        });
+
+        vectorSource.clear();
+        vectorSource.addFeature(pointFeature);
+
+      });
+    }
+
+    function calcDist(lat1, lon1, lat2, lon2) 
+    {
+      var R = 6371; // km
+      var dLat = toRad(lat2-lat1);
+      var dLon = toRad(lon2-lon1);
+      var lat1 = toRad(lat1);
+      var lat2 = toRad(lat2);
+
+      var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.sin(dLon/2) * Math.sin(dLon/2) * Math.cos(lat1) * Math.cos(lat2); 
+      var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+      var d = R * c;
+      return d;
+    }
+
+    function toRad(Value) 
+    {
+      return Value * Math.PI / 180;
+    }
+
+    </script>
+  </body>
+</html>
